@@ -12,7 +12,7 @@ import java.util.Optional;
 @Repository
 public interface BinRepository extends MongoRepository<Bin, String> {
     // We need this to find only the bins that NEED pickup (> 70% full)
-    List<Bin> findByFillLevelGreaterThan(int level);
+    List<Bin> findByFillLevelGreaterThan(double level);
 
     Optional<Bin> findByBinId(String binId);
 

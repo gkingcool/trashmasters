@@ -42,4 +42,7 @@ public class Employee {
 
     @Schema(example = "TRK-002")
     private String currentTruckId;
+
+    @Schema(example = "securePassword123")
+    private String password;
 }

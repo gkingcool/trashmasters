@@ -1,4 +1,4 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.route;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.data.annotation.Id;
@@ -38,4 +38,16 @@ public class Route {
 
     @Schema(example = "12")
     private int totalStops;
+
+    @Schema(example = "[{\"lat\":47.61,\"lon\":-122.2,\"type\":\"STATION\",...}]")
+    private List<RouteStepDTO> steps;
+
+    @Schema(example = "185")
+    private long totalTimeMinutes;
+
+    @Schema(example = "0.0")
+    private double startingTruckLoadYards;
+
+    @Schema(example = "12.5")
+    private double endingTruckVolumeYards;
 }

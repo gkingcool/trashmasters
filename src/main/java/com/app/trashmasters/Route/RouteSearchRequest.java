@@ -1,4 +1,4 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.route;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;

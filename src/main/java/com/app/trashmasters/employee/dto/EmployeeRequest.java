@@ -18,5 +18,6 @@ public class EmployeeRequest {
     private String email;
     @Schema(example = "206-555-1234")
     private String phone;
-
+    @Schema(example = "securePassword123")
+    private String password;
 }

@@ -1,10 +1,12 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.route;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.app.trashmasters.route.RouteService;
+import com.app.trashmasters.route.RouteRepository;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,14 +15,16 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/routes")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"}) // ✅ Allow both ports
 @Tag(name = "Routes", description = "Route generation, lifecycle, and driver operations")
 public class RouteController {
 
     private final RouteService routeService;
+    private final RouteRepository routeRepository;
 
-    public RouteController(RouteService routeService) {
+    public RouteController(RouteService routeService,  RouteRepository routeRepository) {
         this.routeService = routeService;
+        this.routeRepository = routeRepository;
     }
 
     // ==========================================
@@ -32,12 +36,13 @@ public class RouteController {
     public ResponseEntity<?> generateRoutes(
             @Parameter(description = "Number of trucks to dispatch") @RequestParam(defaultValue = "3") int trucks,
             @Parameter(description = "Route date (yyyy-MM-dd), e.g. 2026-04-19") @RequestParam String date,
-            @Parameter(description = "Shift start time (HH:mm), e.g. 07:00") @RequestParam(defaultValue = "07:00") String time) {
+            @Parameter(description = "Shift start time (HH:mm), e.g. 07:00") @RequestParam(defaultValue = "07:00") String time,
+            @RequestParam(defaultValue = "predictive") String strategy) {
         try {
             LocalDate routeDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
             LocalTime startTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("HH:mm"));
 
-            GenerateRoutesResponse response = routeService.generateRoutes(trucks, routeDate, startTime);
+            GenerateRoutesResponse response = routeService.generateRoutes(trucks, routeDate, startTime, strategy);
             return ResponseEntity.ok(response);
 
         } catch (IllegalArgumentException e) {
@@ -47,6 +52,19 @@ public class RouteController {
             e.printStackTrace();
             return ResponseEntity.internalServerError()
                     .body("Route generation failed: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Get routes by date", description = "Returns all saved routes for a specific date")
+    @GetMapping("/by-date/{date}")
+    public ResponseEntity<?> getRoutesByDate(@PathVariable String date) {
+        try {
+            LocalDate routeDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
+            List<Route> routes = routeRepository.findByRouteDate(routeDate);
+            return ResponseEntity.ok(routes);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body("Failed to fetch routes: " + e.getMessage());
         }
     }
 

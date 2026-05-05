@@ -1,9 +1,13 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.route;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor // ✅ ADD THIS: Allows Spring to create an empty instance
+@AllArgsConstructor // ✅ ADD THIS: Keeps your existing constructor usage
 public class RouteStepDTO {
     @Schema(example = "47.6101")
     private double lat;

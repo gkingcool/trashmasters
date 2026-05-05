@@ -1,4 +1,4 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.route;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -7,7 +7,7 @@ import java.util.List;
 public interface RouteService {
 
     // Core route generation
-    GenerateRoutesResponse generateRoutes(int numberOfTrucks, LocalDate routeDate, LocalTime startTime);
+    GenerateRoutesResponse generateRoutes(int numberOfTrucks, LocalDate routeDate, LocalTime startTime, String strategy);
 
     // Route lifecycle
     void processEndOfDay(EndOfDayRequestDTO shiftReport);

@@ -9,18 +9,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/employees")
-@CrossOrigin(origins = "http://localhost:3000") // Allow React frontend to access this
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 @Tag(name = "Employees", description = "Employee and driver management")
 public class EmployeeController {
 
     private final EmployeeService employeeService;
 
     @Autowired
-    public EmployeeController(com.app.trashmasters.employee.EmployeeService employeeService) {
+    public EmployeeController(EmployeeService employeeService) {
         this.employeeService = employeeService;
     }
 
@@ -59,8 +61,43 @@ public class EmployeeController {
         newEmployee.setEmail(employeeRequest.getEmail());
         newEmployee.setPhone(employeeRequest.getPhone());
 
+        // Hash password before saving
+        if (employeeRequest.getPassword() != null && !employeeRequest.getPassword().isEmpty()) {
+            newEmployee.setPassword(employeeRequest.getPassword());
+        }
+
         Employee savedEmployee = employeeService.createEmployee(newEmployee);
         return new ResponseEntity<>(savedEmployee, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
+        try {
+            String email = credentials.get("email");
+            String password = credentials.get("password");
+
+            if (email == null || password == null) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "Employee ID and password are required");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            Employee employee = employeeService.login(email, password);
+
+            // Return employee info WITHOUT password
+            Map<String, Object> response = new HashMap<>();
+            response.put("employeeId", employee.getEmployeeId());
+            response.put("name", employee.getFirstName() + " " + employee.getLastName());
+            response.put("role", employee.getRole());
+            response.put("email", employee.getEmail());
+            response.put("status", employee.getStatus());
+
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(401).body(error);
+        }
     }
 
     // PUT /api/employees/{id}
@@ -72,6 +109,10 @@ public class EmployeeController {
         employeeUpdates.setFirstName(employeeRequest.getFirstName());
         employeeUpdates.setLastName(employeeRequest.getLastName());
         employeeUpdates.setPhone(employeeRequest.getPhone());
+
+        if (employeeRequest.getRole() != null) {
+            employeeUpdates.setRole(employeeRequest.getRole());
+        }
 
         return ResponseEntity.ok(employeeService.updateEmployee(id, employeeUpdates));
     }
@@ -88,6 +129,29 @@ public class EmployeeController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Error deleting Employee.");
+        }
+    }
+
+    @PutMapping("/{id}/reset-password")
+    public ResponseEntity<?> resetPassword(@PathVariable String id,
+                                           @RequestBody Map<String, String> passwordData) {
+        try {
+            String newPassword = passwordData.get("newPassword");
+            if (newPassword == null || newPassword.length() < 6) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "Password must be at least 6 characters");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            employeeService.resetPassword(id, newPassword);
+
+            Map<String, String> success = new HashMap<>();
+            success.put("message", "Password reset successfully");
+            return ResponseEntity.ok(success);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
         }
     }
 

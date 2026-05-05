@@ -1,4 +1,4 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.route;
 
 import com.app.trashmasters.routing.DistanceMatrixService;
 import com.app.trashmasters.routing.SmartRoutingService;
@@ -72,7 +72,7 @@ public class RouteServiceImpl implements RouteService {
     // ==========================================
 
     @Override
-    public GenerateRoutesResponse generateRoutes(int numberOfTrucks, LocalDate routeDate, LocalTime startTime) {
+    public GenerateRoutesResponse generateRoutes(int numberOfTrucks, LocalDate routeDate, LocalTime startTime, String strategy) {
 
         // 0. Validate: route date cannot be in the past
         if (routeDate.isBefore(LocalDate.now())) {
@@ -103,7 +103,7 @@ public class RouteServiceImpl implements RouteService {
         }
 
         // 2. Find bins that need pickup (full, predicted full, or overdue)
-        List<Bin> targetBins = getTargetBins(startDateTime);
+        List<Bin> targetBins = getTargetBins(startDateTime, strategy);
         if (targetBins.isEmpty()) {
             throw new RuntimeException("No bins require pickup at this time.");
         }
@@ -172,6 +172,13 @@ public class RouteServiceImpl implements RouteService {
             routeEntity.setStatus("CREATED");
             routeEntity.setCreatedAt(startDateTime);
             routeEntity.setTotalStops(routeDTO.getSteps().size());
+
+            // Save full route plan & metrics
+            routeEntity.setSteps(routeDTO.getSteps());
+            routeEntity.setTotalTimeMinutes(routeDTO.getTotalTimeMinutes());
+            routeEntity.setStartingTruckLoadYards(routeDTO.getStartingTruckLoadYards());
+            routeEntity.setEndingTruckVolumeYards(routeDTO.getEndingTruckVolumeYards());
+
             routeRepository.save(routeEntity);
         }
 
@@ -239,7 +246,7 @@ public class RouteServiceImpl implements RouteService {
      *  - ML prediction >= predicted threshold (time-horizon-aware)
      *  - Overdue from previous days (skipped bins get priority)
      */
-    private List<Bin> getTargetBins(LocalDateTime startDateTime) {
+    private List<Bin> getTargetBins(LocalDateTime startDateTime, String strategy) {
         List<Bin> allBins = binRepository.findAll();
 
         // Choose prediction horizons based on shift start time
@@ -254,6 +261,10 @@ public class RouteServiceImpl implements RouteService {
 
         final int pH = primaryHorizon;
         final int sH = secondaryHorizon;
+        final boolean usePredictions = "predictive".equalsIgnoreCase(strategy); // ✅ STRATEGY FLAG
+
+        System.out.println(" Using strategy: " + strategy + " | AI Predictions: " + usePredictions);
+
 
         return allBins.stream()
                 .filter(bin -> {
@@ -273,7 +284,7 @@ public class RouteServiceImpl implements RouteService {
 
                     // B) ML predicts it will be full within the shift window
                     boolean isPredictedFull = false;
-                    if (bin.getFuturePredictions() != null) {
+                    if (usePredictions && bin.getFuturePredictions() != null) {
                         Double primary = bin.getFuturePredictions().get(pH);
                         Double secondary = bin.getFuturePredictions().get(sH);
                         isPredictedFull = (primary != null && primary >= predictedThreshold)

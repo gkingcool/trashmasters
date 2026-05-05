@@ -15,7 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/bins")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 @Tag(name = "Bins", description = "Waste bin CRUD, filtering by zone/status, and flagging")
 public class BinController {
 
@@ -119,6 +119,18 @@ public class BinController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Error deleting bin.");
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Bin> updateBin(
+            @PathVariable String id,
+            @RequestBody BinCreateRequest request) {
+        try {
+            Bin updatedBin = binService.updateBin(id, request);
+            return ResponseEntity.ok(updatedBin);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
         }
     }
 

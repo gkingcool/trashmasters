@@ -1,0 +1,38 @@
+// src/main/java/com/app/trashmasters/auth/model/PasswordResetToken.java
+package com.app.trashmasters.auth.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.time.Instant;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Document(collection = "password_reset_tokens")
+public class PasswordResetToken {
+    
+    @Id
+    private String id;
+    
+    @Indexed(unique = true)
+    private String token;
+    
+    @Indexed
+    private String employeeId;  // Employee's employeeId (not MongoDB _id)
+    
+    private Instant expiryDate;
+    
+    private boolean used;
+    
+    private Instant createdAt;
+    
+    // Token is valid for 1 hour
+    public boolean isExpired() {
+        return Instant.now().isAfter(expiryDate);
+    }
+}

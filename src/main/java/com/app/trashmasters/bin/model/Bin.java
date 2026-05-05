@@ -7,7 +7,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-
 import java.time.Instant;
 import java.util.Map;
 
@@ -31,10 +30,13 @@ public class Bin {
 
     @Schema(example = "45.0", description = "Fill percent 0–100")
     private Double fillLevel;
+
     @Schema(example = "2026-03-07T22:26:23.548Z")
     private Instant lastUpdated;
+
     @Schema(example = "120")
     private int depthCm;
+
     @Schema(example = "SENSOR-X99")
     private String sensorId;
 
@@ -42,6 +44,7 @@ public class Bin {
     private BinStatus status;
 
     private Map<Integer, Double> futurePredictions;
+
     @Schema(example = "2026-03-08T20:26:09.970Z")
     private Instant lastPredicted;
 
@@ -56,6 +59,15 @@ public class Bin {
 
     @Schema(example = "false")
     private boolean isFlagged;
+
     @Schema(example = "Lid broken")
     private String issue;
+
+    public Double getLatitude() {
+        return location != null ? location.getLat() : null;
+    }
+
+    public Double getLongitude() {
+        return location != null ? location.getLon() : null;
+    }
 }

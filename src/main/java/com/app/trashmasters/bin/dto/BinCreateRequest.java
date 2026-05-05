@@ -5,6 +5,8 @@ import com.app.trashmasters.bin.model.Location;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 @Schema(description = "Request body for creating a new waste bin")
 public class BinCreateRequest {
@@ -26,4 +28,11 @@ public class BinCreateRequest {
     private BinZone zone;
     @Schema(example = "NORMAL", description = "NORMAL, FULL, CRITICAL, or MAINTENANCE")
     private String status;
+    // ✅ Flat fields to match frontend payload
+    private Double latitude;
+    private Double longitude;
+
+    // Optional prediction seeding
+    private Integer predictedFillLevel;
+    private LocalDateTime predictionTargetTime;
 }
