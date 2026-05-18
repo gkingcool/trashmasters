@@ -3,9 +3,13 @@ package com.app.trashmasters.ManageSensor;
 
 import com.app.trashmasters.ManageSensor.dto.SensorRegistrationRequest;
 import com.app.trashmasters.ManageSensor.model.SensorStatus;
+import com.app.trashmasters.bin.model.Bin;
+import com.app.trashmasters.notification.NotificationService;
+import com.app.trashmasters.notification.model.NotificationType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import com.app.trashmasters.bin.BinRepository;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +19,12 @@ public class SensorService {
 
     @Autowired
     private SensorRepository sensorRepository;
+
+    @Autowired
+    private BinRepository binRepository;
+
+    @Autowired
+    private NotificationService notificationService;
 
     // 1. Add New Sensor (Onboarding)
     public Sensor registerSensor(SensorRegistrationRequest request) {
@@ -88,6 +98,23 @@ public class SensorService {
         Sensor sensor = sensorRepository.findBySensorId(sensorId)
                 .orElseThrow(() -> new RuntimeException("Sensor not found"));
 
+        // 1. If this bin already has a different sensor assigned, unlink it
+        Bin bin = binRepository.findByBinId(binId)
+                .orElseThrow(() -> new RuntimeException("Bin not found: " + binId));
+
+
+        String previousSensorId = bin.getSensorId();
+        if (previousSensorId != null && !previousSensorId.equals(sensorId)) {
+            sensorRepository.findBySensorId(previousSensorId).ifPresent(oldSensor -> {
+                oldSensor.setBinId(null);
+                oldSensor.setStatus(SensorStatus.INACTIVE);
+                sensorRepository.save(oldSensor);  // ✅ Old sensor unlinked
+            });
+        }
+
+        bin.setSensorId(sensorId);
+        binRepository.save(bin);
+
         sensor.setBinId(binId);
         sensor.setStatus(SensorStatus.ACTIVE);
         return sensorRepository.save(sensor);
@@ -109,6 +136,14 @@ public class SensorService {
             sensor.setFlagReason(reason != null ? reason : "Manual Flag");
             // Optionally set status to MAINTENANCE
             sensor.setStatus(SensorStatus.MALFUNCTION);
+
+            // ✅ Send Alert when Flagged
+            notificationService.createSensorNotification(
+                    sensor.getSensorId(),
+                    "⚠️ Sensor Flagged",
+                    "Sensor " + sensor.getSensorId() + " has been flagged. Reason: " + sensor.getFlagReason(),
+                    NotificationType.ALERT
+            );
         } else {
             // If unflagging, clear the reason and reset status
             sensor.setFlagReason(null);

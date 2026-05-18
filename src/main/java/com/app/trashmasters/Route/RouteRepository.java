@@ -1,8 +1,8 @@
-package com.app.trashmasters.route;
+package com.app.trashmasters.Route;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
-import com.app.trashmasters.route.RouteRepository;
-import com.app.trashmasters.route.Route;
+import com.app.trashmasters.Route.RouteRepository;
+import com.app.trashmasters.Route.Route;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;

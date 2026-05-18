@@ -1,8 +1,8 @@
 package com.app.trashmasters.routing;
 
 
-import com.app.trashmasters.route.RouteDTO;
-import com.app.trashmasters.route.RouteStepDTO;
+import com.app.trashmasters.Route.RouteDTO;
+import com.app.trashmasters.Route.RouteStepDTO;
 import com.app.trashmasters.Truck.Truck;
 import com.app.trashmasters.bin.model.Bin;
 import com.app.trashmasters.bin.model.Location;
@@ -37,7 +37,8 @@ public class SmartRoutingService {
             long[][] timeMatrix,
             List<Bin> targetBins,
             List<Truck> trucks,
-            Location stationA) {
+            Location stationA,
+            int shiftDuration) {
 
         int vehicleNumber = trucks.size();
 
@@ -65,9 +66,10 @@ public class SmartRoutingService {
                     });
             routing.setArcCostEvaluatorOfAllVehicles(transitCallbackIndex);
 
+            int shiftMinutes = shiftDuration * 60;
             // 8-Hour Shift Constraint
             routing.addDimension(transitCallbackIndex,
-                    0, 480, true, "Time");
+                    0, shiftMinutes, true, "Time");
 
             // Capacity Callback (compacted yards per bin)
             final int demandCallbackIndex = routing.registerUnaryTransitCallback(
@@ -172,7 +174,7 @@ for (int i = 0; i < vehicleNumber; i++) {
                                     long serviceTime = (fromNode >= 1) ? 5 : 0;
                                     return timeMatrix[fromNode][toNode] + serviceTime;
                                 }),
-                        0, 480, true, "Time");
+                        0, shiftMinutes, true, "Time");
 
                 // Use the same expanded capacities (dump trips handled in post-processing)
                 fallbackRouting.addDimensionWithVehicleCapacity(

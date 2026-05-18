@@ -2,8 +2,8 @@ package com.app.trashmasters.health;
 
 import com.app.trashmasters.bin.BinRepository;
 import com.app.trashmasters.Truck.TruckRepository;
-import com.app.trashmasters.route.RouteRepository;
-import com.app.trashmasters.route.Route;
+import com.app.trashmasters.Route.RouteRepository;
+import com.app.trashmasters.Route.Route;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

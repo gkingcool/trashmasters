@@ -7,6 +7,8 @@ import com.app.trashmasters.bin.model.BinStatus;
 import com.app.trashmasters.ManageSensor.dto.SensorDataRequest;
 import com.app.trashmasters.ManageSensor.model.SensorReading;
 import com.app.trashmasters.ManageSensor.model.SensorStatus;
+import com.app.trashmasters.notification.NotificationService;
+import com.app.trashmasters.notification.model.NotificationType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,7 @@ public class SensorIngestionService {
     @Autowired private SensorRepository sensorRepository;
     @Autowired private BinRepository binRepository;
     @Autowired private SensorReadingRepository historyRepository;
+    @Autowired private NotificationService notificationService;
 
     // The Main Pipeline Method
     @Transactional
@@ -28,12 +31,23 @@ public class SensorIngestionService {
         Sensor sensor = sensorRepository.findBySensorId(request.getSensorId())
                 .orElseThrow(() -> new RuntimeException("Unknown Sensor ID: " + request.getSensorId()));
 
+        boolean wasLow = sensor.getBatteryLevel() != null && sensor.getBatteryLevel() < 20;
         sensor.setBatteryLevel(request.getBattery());
         sensor.setLastUpdated(Instant.now());
 
-        if (request.getBattery() < 15) {
+        // ✅ ALERT: If battery drops below 15%, send notification to Admin
+        if (request.getBattery() < 15 && !wasLow) {
             sensor.setStatus(SensorStatus.LOW_BATTERY);
+            notificationService.createSensorNotification(
+                    sensor.getSensorId(),
+                    "🔋 Low Battery Alert",
+                    "Sensor " + sensor.getSensorId() + " battery is low (" + request.getBattery() + "%).",
+                    NotificationType.WARNING
+            );
+        } else if (request.getBattery() >= 20 && sensor.getStatus() == SensorStatus.LOW_BATTERY) {
+            sensor.setStatus(SensorStatus.ACTIVE);
         }
+
         sensorRepository.save(sensor);
 
         // 2. Stop if Sensor isn't inside a Bin
