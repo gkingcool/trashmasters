@@ -1,8 +1,8 @@
 package com.app.trashmasters.routing;
 
 
-import com.app.trashmasters.route.RouteDTO;
-import com.app.trashmasters.route.RouteStepDTO;
+import com.app.trashmasters.theRoute.RouteDTO;
+import com.app.trashmasters.theRoute.RouteStepDTO;
 import com.app.trashmasters.Truck.Truck;
 import com.app.trashmasters.bin.model.Bin;
 import com.app.trashmasters.bin.model.Location;

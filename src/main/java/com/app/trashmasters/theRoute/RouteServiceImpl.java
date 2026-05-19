@@ -1,4 +1,4 @@
-package com.app.trashmasters.route;
+package com.app.trashmasters.theRoute;
 
 import com.app.trashmasters.routing.DistanceMatrixService;
 import com.app.trashmasters.routing.SmartRoutingService;

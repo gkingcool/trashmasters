@@ -1,4 +1,5 @@
-package com.app.trashmasters.route;
+
+package com.app.trashmasters.theRoute;
 
 import java.time.LocalDate;
 import java.time.LocalTime;

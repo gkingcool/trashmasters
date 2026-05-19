@@ -1,12 +1,10 @@
-package com.app.trashmasters.route;
+package com.app.trashmasters.theRoute;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.app.trashmasters.route.RouteService;
-import com.app.trashmasters.route.RouteRepository;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
