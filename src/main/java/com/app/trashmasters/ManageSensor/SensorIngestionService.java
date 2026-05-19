@@ -28,12 +28,13 @@ public class SensorIngestionService {
         Sensor sensor = sensorRepository.findBySensorId(request.getSensorId())
                 .orElseThrow(() -> new RuntimeException("Unknown Sensor ID: " + request.getSensorId()));
 
-        sensor.setBatteryLevel(request.getBattery());
-        sensor.setLastUpdated(Instant.now());
-
-        if (request.getBattery() < 15) {
-            sensor.setStatus(SensorStatus.LOW_BATTERY);
+        if (request.getBattery() != null) {
+            sensor.setBatteryLevel(request.getBattery());
+            if (request.getBattery() < 15) {
+                sensor.setStatus(SensorStatus.LOW_BATTERY);
+            }
         }
+        sensor.setLastUpdated(Instant.now());
         sensorRepository.save(sensor);
 
         // 2. Stop if Sensor isn't inside a Bin
@@ -92,5 +93,15 @@ public class SensorIngestionService {
     private Double mockTemperature(int month) {
         if (month >= 5 && month <= 9) return 85.0 + (Math.random() * 10);
         return 55.0 + (Math.random() * 10);
+    }
+
+    /**
+     * Entry point for MQTT-sourced readings.  Battery is optional in MQTT payloads
+     * (the plain-string distance format carries no battery info), so this simply
+     * delegates to the main pipeline which already handles a null battery gracefully.
+     */
+    @Transactional
+    public void processSensorDataFromMqtt(SensorDataRequest request) {
+        processSensorData(request);
     }
 }

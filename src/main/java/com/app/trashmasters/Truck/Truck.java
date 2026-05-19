@@ -19,8 +19,8 @@ public class Truck {
     @Schema(example = "DRV-002")
     private String assignedDriverId;
 
-    @Schema(example = "30.0")
-    private final Double maxCapacityYards = 30.0;
+    @Schema(example = "30.0", description = "Maximum compacted cubic yards this truck can hold")
+    private Double maxCapacityYards = 30.0;
 
     @Schema(example = "0.0")
     private Double currentCompactedYards = 0.0;

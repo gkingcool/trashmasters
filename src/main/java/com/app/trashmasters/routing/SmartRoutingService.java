@@ -8,6 +8,7 @@ import com.app.trashmasters.bin.model.Bin;
 import com.app.trashmasters.bin.model.Location;
 import com.google.ortools.Loader;
 import com.google.ortools.constraintsolver.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -21,6 +22,22 @@ import java.util.Set;
  */
 @Service
 public class SmartRoutingService {
+
+    /**
+     * The solver's time horizon is intentionally set BELOW the full shift length.
+     * The post-processor in RouteServiceImpl always appends a mandatory end-of-route
+     * dump trip (dumpTripMinutes) before the truck returns to the station.
+     * If the solver fills the entire shift, there is no room for that dump and the
+     * post-processor cuts ALL bins from the route.
+     *
+     * Formula: solverTimeWindow = shiftMaxMinutes - dumpTripMinutes
+     * Default: 480 - 30 = 450 minutes
+     */
+    @Value("${route.threshold.shift-max-minutes:480}")
+    private long shiftMaxMinutes;
+
+    @Value("${route.threshold.dump-trip-minutes:30}")
+    private long dumpTripMinutes;
 
     static {
         Loader.loadNativeLibraries();
@@ -65,9 +82,11 @@ public class SmartRoutingService {
                     });
             routing.setArcCostEvaluatorOfAllVehicles(transitCallbackIndex);
 
-            // 8-Hour Shift Constraint
+            // Shift time constraint — intentionally shorter than the full shift to leave
+            // room for the mandatory end-of-route dump added by the post-processor.
+            long solverTimeWindow = shiftMaxMinutes - dumpTripMinutes; // e.g. 480 - 30 = 450
             routing.addDimension(transitCallbackIndex,
-                    0, 480, true, "Time");
+                    0, solverTimeWindow, true, "Time");
 
             // Capacity Callback (compacted yards per bin)
             final int demandCallbackIndex = routing.registerUnaryTransitCallback(
@@ -172,7 +191,7 @@ for (int i = 0; i < vehicleNumber; i++) {
                                     long serviceTime = (fromNode >= 1) ? 5 : 0;
                                     return timeMatrix[fromNode][toNode] + serviceTime;
                                 }),
-                        0, 480, true, "Time");
+                        0, solverTimeWindow, true, "Time");
 
                 // Use the same expanded capacities (dump trips handled in post-processing)
                 fallbackRouting.addDimensionWithVehicleCapacity(

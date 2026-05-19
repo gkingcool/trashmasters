@@ -132,6 +132,7 @@ public class EmployeeController {
         }
     }
 
+    @Operation(summary = "Reset employee password", description = "Sets a new password for the given employee ID. Password must be at least 6 characters.")
     @PutMapping("/{id}/reset-password")
     public ResponseEntity<?> resetPassword(@PathVariable String id,
                                            @RequestBody Map<String, String> passwordData) {

@@ -33,9 +33,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/sensors/**").permitAll()
                         .requestMatchers("/api/employees/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-
-                        // Protected endpoints (require auth) - customize later
-                        .requestMatchers("/api/admin/**").authenticated()
+                        .requestMatchers("/api/admin/**").permitAll()  // TODO: lock down with JWT when auth is ready
 
                         // Everything else
                         .anyRequest().permitAll() // ← TEMP: Allow all for testing

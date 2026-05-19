@@ -71,39 +71,23 @@ public class RouteController {
     // ==========================================
     // END OF DAY RECONCILIATION
     // ==========================================
-    @Operation(summary = "End-of-day reconciliation", description = "Closes all routes for the shift, updates bin and truck state for tomorrow")
+     @Operation(
+        summary = "Close out one or more routes",
+        description = "Updates truck loads and applies overdue penalties to skipped bins. " +
+                      "Works for a single driver finishing early (one entry in completedRoutes) " +
+                      "or the full fleet at end of shift (multiple entries).")
     @PostMapping("/end-of-day")
-    public ResponseEntity<String> completeShift(@RequestBody EndOfDayRequestDTO shiftReport) {
+    public ResponseEntity<?> completeShift(@RequestBody EndOfDayRequestDTO shiftReport) {
         try {
             if (shiftReport == null || shiftReport.getCompletedRoutes() == null) {
                 return ResponseEntity.badRequest().body("Invalid shift report payload.");
             }
-            routeService.processEndOfDay(shiftReport);
-            return ResponseEntity.ok("Shift closed successfully. Bins and Trucks updated for tomorrow.");
+            EndOfDayResponseDTO response = routeService.processEndOfDay(shiftReport);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError()
                     .body("Failed to process end of day: " + e.getMessage());
-        }
-    }
-
-    // ==========================================
-    // SINGLE ROUTE COMPLETION
-    // ==========================================
-    @Operation(summary = "Complete a single route", description = "Marks one driver's route as finished and updates bin/truck state")
-    @PostMapping("/complete")
-    public ResponseEntity<String> completeSingleRoute(@RequestBody SingleRouteCompletionDTO request) {
-        try {
-            if (request == null || request.getCompletedRoute() == null) {
-                return ResponseEntity.badRequest().body("Invalid route completion payload.");
-            }
-            routeService.processSingleRouteCompletion(request);
-            return ResponseEntity.ok("Route successfully closed for driver: "
-                    + request.getCompletedRoute().getDriverId());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.internalServerError()
-                    .body("Failed to close route: " + e.getMessage());
         }
     }
 
@@ -188,14 +172,42 @@ public class RouteController {
     }
 
     // ==========================================
-    // MARK ROUTE AS COMPLETED
+    // ADMIN: OVERRIDE ROUTE STATUS
     // ==========================================
-    @Operation(summary = "Mark route as completed")
-    @PatchMapping("/{id}/complete")
-    public ResponseEntity<?> completeRoute(@PathVariable String id) {
+    @Operation(
+        summary = "Override route status (admin)",
+        description = "Manually sets the status of a route. Valid values: CREATED, IN_PROGRESS, COMPLETED. " +
+                      "This is an admin flag only — it does NOT update truck loads or bin overdue counters. " +
+                      "Use POST /complete or POST /end-of-day for real operational close-out.")
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateRouteStatus(
+            @PathVariable String id,
+            @Parameter(description = "New status: CREATED, IN_PROGRESS, or COMPLETED") @RequestParam String status) {
         try {
-            Route route = routeService.completeRoute(id);
+            Route route = routeService.updateRouteStatus(id, status);
             return ResponseEntity.ok(route);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ==========================================
+    // ASSIGN / REASSIGN DRIVER
+    // ==========================================
+    @Operation(
+        summary = "Assign a driver to a route",
+        description = "Overrides the driver on an existing route. Use this when you want a different driver than the one assigned to the truck.")
+    @PatchMapping("/{id}/assign-driver")
+    public ResponseEntity<?> assignDriver(
+            @PathVariable String id,
+            @Parameter(description = "Driver ID to assign, e.g. DRV-007") @RequestParam String driverId) {
+        try {
+            Route route = routeService.assignDriver(id, driverId);
+            return ResponseEntity.ok(route);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

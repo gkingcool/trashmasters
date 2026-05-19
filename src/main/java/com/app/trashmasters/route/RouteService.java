@@ -10,14 +10,14 @@ public interface RouteService {
     GenerateRoutesResponse generateRoutes(int numberOfTrucks, LocalDate routeDate, LocalTime startTime, String strategy);
 
     // Route lifecycle
-    void processEndOfDay(EndOfDayRequestDTO shiftReport);
-    void processSingleRouteCompletion(SingleRouteCompletionDTO request);
+    EndOfDayResponseDTO processEndOfDay(EndOfDayRequestDTO shiftReport);
     void processRealTimeBinSkip(String binId);
 
     // Search / CRUD
     List<Route> searchRoutes(RouteSearchRequest request);
     Route getRouteById(String id);
-    Route completeRoute(String id);
+    Route updateRouteStatus(String id, String status);
+    Route assignDriver(String routeId, String driverId);
     List<Route> getRoutesByDriver(String driverId);
     List<Route> getRoutesByStatus(String status);
     List<Route> getAllRoutes();

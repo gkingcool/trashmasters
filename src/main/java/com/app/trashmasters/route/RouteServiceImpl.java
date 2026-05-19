@@ -36,11 +36,6 @@ public class RouteServiceImpl implements RouteService {
     private double stationLat;
     @Value("${route.station.lon}")
     private double stationLon;
-    @Value("${route.dump.lat}")
-    private double dumpLat;
-    @Value("${route.dump.lon}")
-    private double dumpLon;
-
     @Value("${route.threshold.physical:50.0}")
     private double physicalThreshold;
     @Value("${route.threshold.predicted:80.0}")
@@ -49,6 +44,30 @@ public class RouteServiceImpl implements RouteService {
     private double truckDumpPercent;
     @Value("${route.threshold.dump-trip-minutes:30}")
     private long dumpTripMinutes;
+    @Value("${route.threshold.shift-max-minutes:480}")
+    private long shiftMaxMinutes;
+
+    // Transfer stations — injected from application.properties
+    @Value("${route.transfer[0].name}")
+    private String transferStation0Name;
+    @Value("${route.transfer[0].lat}")
+    private double transferStation0Lat;
+    @Value("${route.transfer[0].lon}")
+    private double transferStation0Lon;
+
+    @Value("${route.transfer[1].name}")
+    private String transferStation1Name;
+    @Value("${route.transfer[1].lat}")
+    private double transferStation1Lat;
+    @Value("${route.transfer[1].lon}")
+    private double transferStation1Lon;
+
+    @Value("${route.transfer[2].name}")
+    private String transferStation2Name;
+    @Value("${route.transfer[2].lat}")
+    private double transferStation2Lat;
+    @Value("${route.transfer[2].lon}")
+    private double transferStation2Lon;
 
     public RouteServiceImpl(RouteRepository routeRepository,
                             BinRepository binRepository,
@@ -65,7 +84,40 @@ public class RouteServiceImpl implements RouteService {
     }
 
     private Location getStation() { return new Location(stationLat, stationLon); }
-    private Location getDump()    { return new Location(dumpLat, dumpLon); }
+
+    /** Returns the transfer station (name + location) closest to the given coordinates. */
+    private TransferStation getNearestTransferStation(double lat, double lon) {
+        List<TransferStation> stations = List.of(
+            new TransferStation(transferStation0Name, transferStation0Lat, transferStation0Lon),
+            new TransferStation(transferStation1Name, transferStation1Lat, transferStation1Lon),
+            new TransferStation(transferStation2Name, transferStation2Lat, transferStation2Lon)
+        );
+        return stations.stream()
+            .min(java.util.Comparator.comparingDouble(s -> haversineKm(lat, lon, s.lat, s.lon)))
+            .orElse(stations.get(0));
+    }
+
+    /** Haversine great-circle distance in kilometres (sufficient for nearest-station selection). */
+    private double haversineKm(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /** Simple value-holder for a transfer station. */
+    private static class TransferStation {
+        final String name;
+        final double lat;
+        final double lon;
+        TransferStation(String name, double lat, double lon) {
+            this.name = name; this.lat = lat; this.lon = lon;
+        }
+        Location toLocation() { return new Location(lat, lon); }
+    }
 
     // ==========================================
     // CORE: ROUTE GENERATION
@@ -304,10 +356,17 @@ public class RouteServiceImpl implements RouteService {
     // ==========================================
 
     /**
-     * Walks through a route step-by-step, tracking cumulative truck load.
-     * When the load would exceed the dump threshold, inserts a DUMP step
-     * so the truck empties before continuing.
-     * Also updates currentTruckLoadYards on every step.
+     * Walks through a route step-by-step, tracking cumulative truck load AND shift time.
+     *
+     * Rules:
+     * 1. If picking up the next bin would exceed the dump threshold, route the truck
+     *    to the nearest transfer station first (mid-route dump).
+     * 2. Before accepting any bin (and any associated dump detour), verify the
+     *    projected route end time stays within the shift limit (default 480 min).
+     *    Bins that would blow the budget are cut — the route closes with a dump
+     *    (if needed) and a return to station.
+     * 3. At the end of the route the truck ALWAYS visits a transfer station if it
+     *    carries any load, so it returns to the garage empty.
      */
     private void insertDumpTripsIfNeeded(RouteDTO route, List<Bin> targetBins,
                                          List<Truck> trucks) {
@@ -322,53 +381,117 @@ public class RouteServiceImpl implements RouteService {
                 ? truck.getCurrentCompactedYards() : 0.0;
         double currentLoad = startingLoad;
 
-        // Set the starting load on the RouteDTO
         route.setStartingTruckLoadYards(Math.round(startingLoad * 100.0) / 100.0);
 
-        Location dump = getDump();
         List<RouteStepDTO> originalSteps = route.getSteps();
         List<RouteStepDTO> newSteps = new ArrayList<>();
-        long etaOffset = 0; // cumulative time added by dump detours
+        long etaOffset = 0;   // cumulative minutes added by dump detours so far
 
-        for (RouteStepDTO step : originalSteps) {
-            // Apply accumulated dump-trip time offset to this step's ETA
+        // Pre-scan: find the OR-Tools ETA of the final STATION/END step.
+        // This is the baseline total-route time the solver produced (without any dump detours).
+        long originalFinalEta = originalSteps.stream()
+                .filter(s -> "STATION".equals(s.getType()) && "END".equals(s.getAction()))
+                .mapToLong(RouteStepDTO::getEstimatedArrivalMinutes)
+                .max().orElse(0L);
+
+        // Track last known truck position for nearest-station selection
+        double lastLat = stationLat;
+        double lastLon = stationLon;
+
+        boolean routeCutOff = false; // once true, skip remaining BIN steps
+
+        for (int i = 0; i < originalSteps.size(); i++) {
+            RouteStepDTO step = originalSteps.get(i);
             step.setEstimatedArrivalMinutes(step.getEstimatedArrivalMinutes() + etaOffset);
+
+            boolean isLastStation = (i == originalSteps.size() - 1)
+                    && "STATION".equals(step.getType())
+                    && "END".equals(step.getAction());
+
+            if (isLastStation) {
+                // Always close the route: dump if needed, then return to station
+                if (currentLoad > 0) {
+                    TransferStation nearest = getNearestTransferStation(lastLat, lastLon);
+                    long dumpEta = step.getEstimatedArrivalMinutes();
+                    RouteStepDTO dumpStep = new RouteStepDTO(
+                            nearest.lat, nearest.lon,
+                            "DUMP", null, "EMPTY_TRUCK",
+                            dumpEta, 0.0);
+                    dumpStep.setStationName(nearest.name);
+                    newSteps.add(dumpStep);
+                    currentLoad = 0;
+                    etaOffset += dumpTripMinutes;
+                    step.setEstimatedArrivalMinutes(step.getEstimatedArrivalMinutes() + dumpTripMinutes);
+                    System.out.println("🏁 Truck " + route.getTruckId()
+                            + " → end-of-route dump at \"" + nearest.name
+                            + "\" before returning to station (+" + dumpTripMinutes + " min)");
+                }
+                step.setCurrentTruckLoadYards(0.0);
+                newSteps.add(step);
+                continue;
+            }
+
+            // If a previous bin was cut due to shift cap, skip remaining BIN steps
+            // (keep non-BIN steps so we still close the route correctly below)
+            if (routeCutOff && "BIN".equals(step.getType())) {
+                System.out.println("⏰ Truck " + route.getTruckId()
+                        + " → shift cap: skipping bin " + step.getBinId());
+                continue;
+            }
 
             if ("BIN".equals(step.getType()) && step.getBinId() != null) {
                 double binLoad = calculateBinCompactedLoad(step.getBinId(), targetBins);
+                boolean needsDumpFirst = (currentLoad + binLoad > dumpThreshold);
 
-                // Insert dump trip BEFORE this bin if picking it up would exceed threshold
-                if (currentLoad + binLoad > dumpThreshold) {
-                    // Dump step happens at the current ETA (before the bin pickup)
+                // ── Shift cap check ──────────────────────────────────────────────
+                // Projected end = original final ETA
+                //               + all dump-detour minutes already added (etaOffset)
+                //               + this mid-route dump (if needed for this bin)
+                //               + mandatory end-of-route dump (always reserve)
+                long midDumpCost   = needsDumpFirst ? dumpTripMinutes : 0;
+                long endDumpReserve = dumpTripMinutes; // always reserve for end-of-route dump
+                long projectedEnd  = originalFinalEta + etaOffset + midDumpCost + endDumpReserve;
+
+                if (projectedEnd > shiftMaxMinutes) {
+                    System.out.println("⏰ Truck " + route.getTruckId()
+                            + " → shift cap reached before bin " + step.getBinId()
+                            + " (projected end " + projectedEnd + " min > " + shiftMaxMinutes + " min limit)");
+                    routeCutOff = true;
+                    continue; // skip this bin and all remaining bins
+                }
+                // ─────────────────────────────────────────────────────────────────
+
+                if (needsDumpFirst) {
+                    TransferStation nearest = getNearestTransferStation(lastLat, lastLon);
                     long dumpEta = step.getEstimatedArrivalMinutes();
-                    newSteps.add(new RouteStepDTO(
-                            dump.getLat(), dump.getLon(),
+                    RouteStepDTO dumpStep = new RouteStepDTO(
+                            nearest.lat, nearest.lon,
                             "DUMP", null, "EMPTY_TRUCK",
-                            dumpEta, 0.0));
+                            dumpEta, 0.0);
+                    dumpStep.setStationName(nearest.name);
+                    newSteps.add(dumpStep);
                     currentLoad = 0;
-
-                    // Offset this bin and all future steps by the dump round-trip time
                     etaOffset += dumpTripMinutes;
                     step.setEstimatedArrivalMinutes(step.getEstimatedArrivalMinutes() + dumpTripMinutes);
-
                     System.out.println("🚛 Truck " + route.getTruckId()
-                            + " → dump trip inserted before bin " + step.getBinId()
+                            + " → mid-route dump at \"" + nearest.name
+                            + "\" before bin " + step.getBinId()
                             + " (+" + dumpTripMinutes + " min)");
                 }
 
                 currentLoad += binLoad;
                 step.setCurrentTruckLoadYards(Math.round(currentLoad * 100.0) / 100.0);
+                lastLat = step.getLat();
+                lastLon = step.getLon();
             } else {
-                // STATION (START or END) — show current load at that point
                 step.setCurrentTruckLoadYards(Math.round(currentLoad * 100.0) / 100.0);
+                if (step.getLat() != 0) { lastLat = step.getLat(); lastLon = step.getLon(); }
             }
             newSteps.add(step);
         }
 
         route.setSteps(newSteps);
         route.setEndingTruckVolumeYards(Math.round(currentLoad * 100.0) / 100.0);
-
-        // Update total time to include dump detours
         route.setTotalTimeMinutes(route.getTotalTimeMinutes() + etaOffset);
     }
 
@@ -400,37 +523,54 @@ public class RouteServiceImpl implements RouteService {
     // ==========================================
 
     @Override
-    public void processEndOfDay(EndOfDayRequestDTO shiftReport) {
-        for (RouteDTO route : shiftReport.getCompletedRoutes()) {
+    public EndOfDayResponseDTO processEndOfDay(EndOfDayRequestDTO shiftReport) {
+        List<EndOfDayResponseDTO.TruckSummary> truckUpdates = new ArrayList<>();
+        List<String> binsResetIds = new ArrayList<>();
+
+        for (CompletedRouteDTO route : shiftReport.getCompletedRoutes()) {
+            // Update truck load
             Truck truck = truckRepository.findByTruckId(route.getTruckId())
                     .orElseThrow(() -> new RuntimeException("Truck not found: " + route.getTruckId()));
             truck.setCurrentCompactedYards(route.getEndingTruckVolumeYards());
             truckRepository.save(truck);
+            truckUpdates.add(new EndOfDayResponseDTO.TruckSummary(
+                    route.getTruckId(), route.getDriverId(), route.getEndingTruckVolumeYards()));
+
+            // Reset fill level to 0 for every bin that was successfully collected
+            if (route.getCollectedBinIds() != null) {
+                for (String binId : route.getCollectedBinIds()) {
+                    binRepository.findByBinId(binId).ifPresent(bin -> {
+                        bin.setFillLevel(0.0);
+                        bin.setDaysOverdue(0); // clear any overdue penalty — bin was serviced
+                        binRepository.save(bin);
+                        binsResetIds.add(binId);
+                    });
+                }
+            }
         }
 
+        // Apply overdue penalty to skipped bins
+        List<String> overdueApplied = new ArrayList<>();
         if (shiftReport.getSkippedBinIds() != null) {
             for (String skippedId : shiftReport.getSkippedBinIds()) {
                 incrementBinOverdue(skippedId);
+                overdueApplied.add(skippedId);
             }
         }
-        System.out.println("✅ End of Day processing complete. Database ready for tomorrow.");
-    }
 
-    @Override
-    public void processSingleRouteCompletion(SingleRouteCompletionDTO request) {
-        RouteDTO route = request.getCompletedRoute();
+        EndOfDayResponseDTO response = new EndOfDayResponseDTO();
+        response.setRoutesClosed(truckUpdates.size());
+        response.setTruckUpdates(truckUpdates);
+        response.setBinsReset(binsResetIds.size());
+        response.setBinsResetIds(binsResetIds);
+        response.setBinsMarkedOverdue(overdueApplied.size());
+        response.setOverdueAppliedTo(overdueApplied);
+        response.setMessage("Database ready for tomorrow.");
 
-        Truck truck = truckRepository.findByTruckId(route.getTruckId())
-                .orElseThrow(() -> new RuntimeException("Truck not found: " + route.getTruckId()));
-        truck.setCurrentCompactedYards(route.getEndingTruckVolumeYards());
-        truckRepository.save(truck);
-
-        if (request.getSkippedBinIds() != null) {
-            for (String skippedId : request.getSkippedBinIds()) {
-                incrementBinOverdue(skippedId);
-            }
-        }
-        System.out.println("✅ Route closed for Driver: " + route.getDriverId());
+        System.out.println("✅ End of Day: " + truckUpdates.size() + " routes closed, "
+                + binsResetIds.size() + " bins reset, "
+                + overdueApplied.size() + " bins penalized.");
+        return response;
     }
 
     @Override
@@ -487,10 +627,28 @@ public class RouteServiceImpl implements RouteService {
     }
 
     @Override
-    public Route completeRoute(String id) {
+    public Route updateRouteStatus(String id, String status) {
+        List<String> valid = List.of("CREATED", "IN_PROGRESS", "COMPLETED");
+        if (status == null || !valid.contains(status.toUpperCase())) {
+            throw new IllegalArgumentException(
+                "Invalid status \"" + status + "\". Must be one of: " + valid);
+        }
         Route route = getRouteById(id);
-        route.setStatus("COMPLETED");
+        route.setStatus(status.toUpperCase());
         return routeRepository.save(route);
+    }
+
+    @Override
+    public Route assignDriver(String routeId, String driverId) {
+        if (driverId == null || driverId.isBlank()) {
+            throw new IllegalArgumentException("Driver ID must not be empty.");
+        }
+        Route route = getRouteById(routeId);
+        String previousDriver = route.getDriverId();
+        route.setDriverId(driverId.trim());
+        Route saved = routeRepository.save(route);
+        System.out.println("👤 Route " + routeId + " re-assigned: " + previousDriver + " → " + driverId);
+        return saved;
     }
 
     @Override

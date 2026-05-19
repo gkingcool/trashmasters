@@ -40,4 +40,41 @@ public class DataSeederController {
         String result = dataFixService.fixData();
         return ResponseEntity.ok(result);
     }
+
+    // Endpoint: POST /api/dev/boost-fill-levels
+    @Operation(
+        summary = "Boost bin fill levels",
+        description = "Sets fill levels so ~90% of bins are ≥75% full. " +
+                      "Distribution: 20% critical (88–100%), 70% high (75–87%), 10% normal (30–74%). " +
+                      "Also updates bin status (CRITICAL/FULL/NORMAL) accordingly."
+    )
+    @PostMapping("/boost-fill-levels")
+    public ResponseEntity<String> boostFillLevels() {
+        String result = dataFixService.boostFillLevels();
+        return ResponseEntity.ok(result);
+    }
+
+    // Endpoint: POST /api/dev/update-bin-coordinates
+    @Operation(
+        summary = "Update bin coordinates",
+        description = "One-time migration: sets precise lat/lon for BEL-BIN-001 through BEL-BIN-070 " +
+                      "using the provided coordinate list."
+    )
+    @PostMapping("/update-bin-coordinates")
+    public ResponseEntity<String> updateBinCoordinates() {
+        String result = dataFixService.updateBinCoordinates();
+        return ResponseEntity.ok(result);
+    }
+
+    // Endpoint: POST /api/dev/reset-truck-loads
+    @Operation(
+        summary = "Reset all truck loads to 0",
+        description = "Sets currentCompactedYards=0 for all trucks. " +
+                      "Use this at the start of a new day if end-of-day was not called. " +
+                      "Route generation also auto-resets carry-over loads, but this endpoint lets you do it manually."
+    )
+    @PostMapping("/reset-truck-loads")
+    public ResponseEntity<String> resetTruckLoads() {
+        return ResponseEntity.ok(dataFixService.resetTruckLoads());
+    }
 }
