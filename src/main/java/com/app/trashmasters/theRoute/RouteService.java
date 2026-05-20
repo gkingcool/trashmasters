@@ -13,6 +13,7 @@ public interface RouteService {
     // Route lifecycle
     EndOfDayResponseDTO processEndOfDay(EndOfDayRequestDTO shiftReport);
     void processRealTimeBinSkip(String binId);
+    void confirmBinPickup(String routeId, String binId);
 
     // Search / CRUD
     List<Route> searchRoutes(RouteSearchRequest request);

@@ -525,29 +525,21 @@ public class RouteServiceImpl implements RouteService {
     @Override
     public EndOfDayResponseDTO processEndOfDay(EndOfDayRequestDTO shiftReport) {
         List<EndOfDayResponseDTO.TruckSummary> truckUpdates = new ArrayList<>();
-        List<String> binsResetIds = new ArrayList<>();
 
         for (CompletedRouteDTO route : shiftReport.getCompletedRoutes()) {
-            // Update truck load
+            // Update truck load with whatever is left in the truck at end of shift
             Truck truck = truckRepository.findByTruckId(route.getTruckId())
                     .orElseThrow(() -> new RuntimeException("Truck not found: " + route.getTruckId()));
             truck.setCurrentCompactedYards(route.getEndingTruckVolumeYards());
             truckRepository.save(truck);
             truckUpdates.add(new EndOfDayResponseDTO.TruckSummary(
                     route.getTruckId(), route.getDriverId(), route.getEndingTruckVolumeYards()));
-
-            // Reset fill level to 0 for every bin that was successfully collected
-            if (route.getCollectedBinIds() != null) {
-                for (String binId : route.getCollectedBinIds()) {
-                    binRepository.findByBinId(binId).ifPresent(bin -> {
-                        bin.setFillLevel(0.0);
-                        bin.setDaysOverdue(0); // clear any overdue penalty — bin was serviced
-                        binRepository.save(bin);
-                        binsResetIds.add(binId);
-                    });
-                }
-            }
         }
+
+        // NOTE: Bin fill levels are NOT reset here.
+        // Individual pickups are confirmed in real-time via POST /api/routes/{routeId}/pickup/{binId},
+        // which clears fill level immediately. By the time end-of-day is called hours later,
+        // sensors will have sent fresh fill readings — we must not overwrite them with 0.
 
         // Apply overdue penalty to skipped bins
         List<String> overdueApplied = new ArrayList<>();
@@ -561,14 +553,13 @@ public class RouteServiceImpl implements RouteService {
         EndOfDayResponseDTO response = new EndOfDayResponseDTO();
         response.setRoutesClosed(truckUpdates.size());
         response.setTruckUpdates(truckUpdates);
-        response.setBinsReset(binsResetIds.size());
-        response.setBinsResetIds(binsResetIds);
+        response.setBinsReset(0);
+        response.setBinsResetIds(List.of());
         response.setBinsMarkedOverdue(overdueApplied.size());
         response.setOverdueAppliedTo(overdueApplied);
-        response.setMessage("Database ready for tomorrow.");
+        response.setMessage("Shift closed. Truck loads updated. Skipped bins penalized. Use POST /pickup/{binId} during the route to confirm individual bin collections.");
 
         System.out.println("✅ End of Day: " + truckUpdates.size() + " routes closed, "
-                + binsResetIds.size() + " bins reset, "
                 + overdueApplied.size() + " bins penalized.");
         return response;
     }
@@ -582,6 +573,32 @@ public class RouteServiceImpl implements RouteService {
         bin.setDaysOverdue((currentOverdue != null ? currentOverdue : 0) + 1);
         binRepository.save(bin);
         System.out.println("⚠️ Real-Time Skip: Bin " + binId + " penalty increased.");
+    }
+
+    @Override
+    public void confirmBinPickup(String routeId, String binId) {
+        // Verify the route exists and the bin is on it
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new IllegalArgumentException("Route ID " + routeId + " not found."));
+
+        boolean binOnRoute = route.getBinIds() != null && route.getBinIds().contains(binId);
+        if (!binOnRoute) {
+            throw new IllegalArgumentException("Bin " + binId + " is not part of route " + routeId + ".");
+        }
+
+        // Clear the bin — fresh sensor data will repopulate fill level naturally
+        Bin bin = binRepository.findByBinId(binId)
+                .orElseThrow(() -> new IllegalArgumentException("Bin ID " + binId + " not found."));
+
+        double previousFill = bin.getFillLevel() != null ? bin.getFillLevel() : 0.0;
+        bin.setFillLevel(0.0);
+        bin.setDaysOverdue(0);
+        bin.setLastUpdated(java.time.Instant.now());
+        binRepository.save(bin);
+
+        System.out.println("✅ Bin Pickup Confirmed: " + binId
+                + " | previous fill=" + previousFill + "% → 0%"
+                + " | overdue reset | route=" + routeId);
     }
 
     /** Shared helper — increments daysOverdue for a bin */

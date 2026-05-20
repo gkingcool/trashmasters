@@ -2,6 +2,8 @@
 package com.app.trashmasters.ManageSensor;
 
 import com.app.trashmasters.ManageSensor.model.SensorReading;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/sensors")
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
+@Tag(name = "Sensor History", description = "Aggregated sensor reading history for charts and analytics")
 public class SensorHistoryController {
 
     @Autowired
@@ -25,6 +28,7 @@ public class SensorHistoryController {
 
     // GET /api/sensors/history/waste-by-hour
     // Returns waste collected by hour for today
+    @Operation(summary = "Get waste collected by hour", description = "Returns summed fill levels grouped by hour (9 AM–5 PM) for dashboard charts")
     @GetMapping("/history/waste-by-hour")
     public ResponseEntity<List<Double>> getWasteByHour() {
         List<SensorReading> readings = historyRepository.findAll();
@@ -49,6 +53,7 @@ public class SensorHistoryController {
 
     // GET /api/sensors/history/revenue-by-month
     // Returns estimated revenue by month (based on waste collected)
+    @Operation(summary = "Get estimated revenue by month", description = "Returns estimated monthly revenue ($0.05/kg of waste) for the full year")
     @GetMapping("/history/revenue-by-month")
     public ResponseEntity<List<Double>> getRevenueByMonth() {
         List<SensorReading> readings = historyRepository.findAll();

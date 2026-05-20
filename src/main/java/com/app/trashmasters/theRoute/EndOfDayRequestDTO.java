@@ -6,7 +6,9 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-@Schema(description = "End-of-day shift report submitted after all drivers finish")
+@Schema(description = "End-of-day shift report. Updates truck loads and penalizes skipped bins. " +
+        "Bin fill levels are NOT cleared here — use POST /api/routes/{routeId}/pickup/{binId} " +
+        "in real-time during the route to confirm each bin collection.")
 public class EndOfDayRequestDTO {
 
     @ArraySchema(schema = @Schema(implementation = CompletedRouteDTO.class))

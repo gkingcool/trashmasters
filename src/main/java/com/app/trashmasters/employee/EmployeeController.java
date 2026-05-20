@@ -70,6 +70,7 @@ public class EmployeeController {
         return new ResponseEntity<>(savedEmployee, HttpStatus.CREATED);
     }
 
+    @Operation(summary = "Employee login", description = "Authenticates an employee by email and password. Returns employee info (no password).")
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
         try {

@@ -111,6 +111,30 @@ public class RouteController {
     }
 
     // ==========================================
+    // DRIVER TABLET: CONFIRM BIN PICKUP
+    // ==========================================
+    @Operation(
+        summary = "Confirm individual bin pickup",
+        description = "Driver confirms a bin was collected. Immediately resets bin fillLevel to 0 and clears any overdue penalty. " +
+                      "Call this in real-time as each bin is serviced — do NOT wait until end-of-day, " +
+                      "as sensors will overwrite fill level with fresh readings during the shift.")
+    @PostMapping("/{routeId}/pickup/{binId}")
+    public ResponseEntity<String> confirmBinPickup(
+            @PathVariable String routeId,
+            @PathVariable String binId) {
+        try {
+            routeService.confirmBinPickup(routeId, binId);
+            return ResponseEntity.ok("Bin " + binId + " pickup confirmed. Fill level cleared.");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError()
+                    .body("Failed to confirm pickup: " + e.getMessage());
+        }
+    }
+
+    // ==========================================
     // ALL ROUTES (history)
     // ==========================================
     @Operation(summary = "Get all routes", description = "Returns full route history")
