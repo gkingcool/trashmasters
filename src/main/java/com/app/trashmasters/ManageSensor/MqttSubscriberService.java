@@ -32,10 +32,10 @@ import java.nio.charset.StandardCharsets;
 public class MqttSubscriberService {
 
     // Credentials — stored as fields to avoid .properties file issues with special chars (# breaks parsing)
-    private static final String MQTT_HOST = "ec20678ab1fa44eba761c1cbaa0f3a5f.s1.eu.hivemq.cloud";
+    private static final String MQTT_HOST = "";
     private static final int    MQTT_PORT = 8883;
-    private static final String MQTT_USER = "capstone26-smartwaste";
-    private static final String MQTT_PASS = "NHKH#33j$1@@u*";
+    private static final String MQTT_USER = "";
+    private static final String MQTT_PASS = "";
 
     @Value("${mqtt.topic:waste/sensor/distance}")
     private String topic;
