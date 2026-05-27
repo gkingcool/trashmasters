@@ -70,6 +70,7 @@ public class EmployeeController {
         return new ResponseEntity<>(savedEmployee, HttpStatus.CREATED);
     }
 
+    @Operation(summary = "Employee login", description = "Authenticates an employee by email and password. Returns employee info (no password).")
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
         try {
@@ -132,6 +133,7 @@ public class EmployeeController {
         }
     }
 
+    @Operation(summary = "Reset employee password", description = "Sets a new password for the given employee ID. Password must be at least 6 characters.")
     @PutMapping("/{id}/reset-password")
     public ResponseEntity<?> resetPassword(@PathVariable String id,
                                            @RequestBody Map<String, String> passwordData) {

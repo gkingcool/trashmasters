@@ -98,6 +98,12 @@ public class SensorService {
         Sensor sensor = sensorRepository.findBySensorId(sensorId)
                 .orElseThrow(() -> new RuntimeException("Sensor not found"));
 
+        if (sensor.getBinId() != null && !sensor.getBinId().equals(binId)) {
+            binRepository.findByBinId(sensor.getBinId()).ifPresent(previousBin -> {
+                previousBin.setSensorId(null);
+                binRepository.save(previousBin);
+            });
+        }
         // 1. If this bin already has a different sensor assigned, unlink it
         Bin bin = binRepository.findByBinId(binId)
                 .orElseThrow(() -> new RuntimeException("Bin not found: " + binId));
@@ -108,7 +114,7 @@ public class SensorService {
             sensorRepository.findBySensorId(previousSensorId).ifPresent(oldSensor -> {
                 oldSensor.setBinId(null);
                 oldSensor.setStatus(SensorStatus.INACTIVE);
-                sensorRepository.save(oldSensor);  // ✅ Old sensor unlinked
+                sensorRepository.save(oldSensor);
             });
         }
 

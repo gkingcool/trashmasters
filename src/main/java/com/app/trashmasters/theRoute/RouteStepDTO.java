@@ -1,4 +1,4 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.theRoute;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -27,8 +27,8 @@ public class RouteStepDTO {
     private int daysOverdue;
     @Schema(example = "72.5", description = "Fill percent 0–100. Only applies to BIN steps.")
     private double binFillLevel;
-    @Schema(example = "Car blocking access", description = "Reason provided by driver when skipping this bin")
-    private String skipReason;
+    @Schema(example = "Houghton Recycling & Transfer Station", description = "Name of the transfer station. Only applies to DUMP steps.")
+    private String stationName;
 
     public RouteStepDTO(double lat, double lon, String type, String binId, String action, long eta, double truckLoad) {
         this.lat = lat;

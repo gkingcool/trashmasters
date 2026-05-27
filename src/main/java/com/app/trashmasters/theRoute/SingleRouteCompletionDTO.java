@@ -1,4 +1,4 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.theRoute;
 
 
 import lombok.Data;

@@ -30,6 +30,8 @@ public class TruckController {
             Truck truck = new Truck();
             truck.setTruckId(request.getTruckId());
             truck.setAssignedDriverId(request.getAssignedDriverId());
+            truck.setMaxCapacityYards(
+                    request.getMaxCapacityYards() != null ? request.getMaxCapacityYards() : 30.0);
             truck.setCurrentCompactedYards(
                     request.getCurrentCompactedYards() != null ? request.getCurrentCompactedYards() : 0.0);
 
@@ -74,6 +76,9 @@ public class TruckController {
         try {
             Truck truckData = new Truck();
             truckData.setAssignedDriverId(request.getAssignedDriverId());
+            if (request.getMaxCapacityYards() != null) {
+                truckData.setMaxCapacityYards(request.getMaxCapacityYards());
+            }
             truckData.setCurrentCompactedYards(request.getCurrentCompactedYards());
 
             Truck updatedTruck = truckService.updateTruck(truckId, truckData);

@@ -31,7 +31,7 @@ public class PredictionScheduler {
      * Runs every hour on the hour. For each bin, calls SageMaker to predict
      * fill levels at 4h, 8h, and 12h ahead. Stores predictions in MongoDB.
      */
-    @Scheduled(cron = "0 0 * * * *")
+//    @Scheduled(cron = "0 0 * * * *")
     public void updateAllBinPredictions() {
         System.out.println("⏳ Starting hourly AI prediction batch job...");
 

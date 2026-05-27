@@ -33,6 +33,7 @@ build/
 .vscode/
 
 ### .env ###
-.env.DS_Store
-.DS_Store
 .env
+# macOS
+.DS_Store
+**/.DS_Store

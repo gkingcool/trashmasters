@@ -2,6 +2,8 @@
 package com.app.trashmasters.auth;
 
 import com.app.trashmasters.auth.model.PasswordResetToken;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +15,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000"})
+@Tag(name = "Auth", description = "Password reset flow — request token, validate token, reset password")
 public class AuthController {
 
     private final PasswordResetTokenService resetTokenService;
@@ -26,6 +29,7 @@ public class AuthController {
      * POST /api/auth/forgot-password
      * Initiates password reset flow by generating a token and sending email
      */
+    @Operation(summary = "Request password reset", description = "Generates a reset token and sends it to the employee's email address")
     @PostMapping("/forgot-password")
     public ResponseEntity<Map<String, Object>> forgotPassword(@RequestBody Map<String, String> request) {
         Map<String, Object> response = new HashMap<>();
@@ -56,6 +60,7 @@ public class AuthController {
      * POST /api/auth/reset-password
      * Resets password using valid token
      */
+    @Operation(summary = "Reset password with token", description = "Resets the employee password using a valid unexpired token. Password must be ≥8 chars with upper, lower, and digit.")
     @PostMapping("/reset-password")
     public ResponseEntity<Map<String, Object>> resetPassword(@RequestBody Map<String, String> request) {
         Map<String, Object> response = new HashMap<>();
@@ -114,6 +119,7 @@ public class AuthController {
      * GET /api/auth/validate-token
      * Validates if a reset token is still valid (not expired, not used)
      */
+    @Operation(summary = "Validate reset token", description = "Checks whether a password reset token is still valid (not expired, not used)")
     @GetMapping("/validate-token")
     public ResponseEntity<Map<String, Object>> validateToken(@RequestParam String token) {
         Map<String, Object> response = new HashMap<>();

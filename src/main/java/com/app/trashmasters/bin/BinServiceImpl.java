@@ -114,6 +114,7 @@ public class BinServiceImpl implements BinService {
         if (request.getFillLevel() != null) bin.setFillLevel(request.getFillLevel());
         bin.setSensorId(request.getSensorId());
         bin.setCapacityYards(request.getCapacityYards());
+        bin.setDaysOverdue(0);
         bin.setLastUpdated(Instant.now());
 
         return binRepository.save(bin);

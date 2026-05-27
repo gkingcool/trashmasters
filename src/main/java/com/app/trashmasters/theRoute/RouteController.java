@@ -1,20 +1,14 @@
-package com.app.trashmasters.Route;
+package com.app.trashmasters.theRoute;
 
-import com.app.trashmasters.bin.model.Location;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.Map;
-import com.app.trashmasters.Route.RouteService;
-import com.app.trashmasters.Route.RouteRepository;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @RestController
@@ -26,7 +20,7 @@ public class RouteController {
     private final RouteService routeService;
     private final RouteRepository routeRepository;
 
-    public RouteController(RouteService routeService, RouteRepository routeRepository) {
+    public RouteController(RouteService routeService,  RouteRepository routeRepository) {
         this.routeService = routeService;
         this.routeRepository = routeRepository;
     }
@@ -41,17 +35,12 @@ public class RouteController {
             @Parameter(description = "Number of trucks to dispatch") @RequestParam(defaultValue = "3") int trucks,
             @Parameter(description = "Route date (yyyy-MM-dd), e.g. 2026-04-19") @RequestParam String date,
             @Parameter(description = "Shift start time (HH:mm), e.g. 07:00") @RequestParam(defaultValue = "07:00") String time,
-            @RequestParam(defaultValue = "predictive") String strategy,
-            @RequestParam(defaultValue = "47.6101") double depotLat,
-            @RequestParam(defaultValue = "-122.2015") double depotLon,
-            @RequestParam(defaultValue = "8") int shiftDuration){
+            @RequestParam(defaultValue = "predictive") String strategy) {
         try {
             LocalDate routeDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
             LocalTime startTime = LocalTime.parse(time, DateTimeFormatter.ofPattern("HH:mm"));
 
-            Location depot = new Location(depotLat, depotLon);
-
-            GenerateRoutesResponse response = routeService.generateRoutes(trucks, routeDate, startTime, strategy, depot, shiftDuration);
+            GenerateRoutesResponse response = routeService.generateRoutes(trucks, routeDate, startTime, strategy);
             return ResponseEntity.ok(response);
 
         } catch (IllegalArgumentException e) {
@@ -69,16 +58,9 @@ public class RouteController {
     public ResponseEntity<?> getRoutesByDate(@PathVariable String date) {
         try {
             LocalDate routeDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
-            System.out.println("Fetching routes for: " + routeDate);
             List<Route> routes = routeRepository.findByRouteDate(routeDate);
-            System.out.println("Found " + routes.size() + " routes");
             return ResponseEntity.ok(routes);
-        } catch (DateTimeParseException e) {
-            return ResponseEntity.badRequest()
-                    .body("Invalid date format: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("Error fetching routes: " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.internalServerError()
                     .body("Failed to fetch routes: " + e.getMessage());
         }
@@ -87,39 +69,23 @@ public class RouteController {
     // ==========================================
     // END OF DAY RECONCILIATION
     // ==========================================
-    @Operation(summary = "End-of-day reconciliation", description = "Closes all routes for the shift, updates bin and truck state for tomorrow")
+     @Operation(
+        summary = "Close out one or more routes",
+        description = "Updates truck loads and applies overdue penalties to skipped bins. " +
+                      "Works for a single driver finishing early (one entry in completedRoutes) " +
+                      "or the full fleet at end of shift (multiple entries).")
     @PostMapping("/end-of-day")
-    public ResponseEntity<String> completeShift(@RequestBody EndOfDayRequestDTO shiftReport) {
+    public ResponseEntity<?> completeShift(@RequestBody EndOfDayRequestDTO shiftReport) {
         try {
             if (shiftReport == null || shiftReport.getCompletedRoutes() == null) {
                 return ResponseEntity.badRequest().body("Invalid shift report payload.");
             }
-            routeService.processEndOfDay(shiftReport);
-            return ResponseEntity.ok("Shift closed successfully. Bins and Trucks updated for tomorrow.");
+            EndOfDayResponseDTO response = routeService.processEndOfDay(shiftReport);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError()
                     .body("Failed to process end of day: " + e.getMessage());
-        }
-    }
-
-    // ==========================================
-    // SINGLE ROUTE COMPLETION
-    // ==========================================
-    @Operation(summary = "Complete a single route", description = "Marks one driver's route as finished and updates bin/truck state")
-    @PostMapping("/complete")
-    public ResponseEntity<String> completeSingleRoute(@RequestBody SingleRouteCompletionDTO request) {
-        try {
-            if (request == null || request.getCompletedRoute() == null) {
-                return ResponseEntity.badRequest().body("Invalid route completion payload.");
-            }
-            routeService.processSingleRouteCompletion(request);
-            return ResponseEntity.ok("Route successfully closed for driver: "
-                    + request.getCompletedRoute().getDriverId());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.internalServerError()
-                    .body("Failed to close route: " + e.getMessage());
         }
     }
 
@@ -145,32 +111,39 @@ public class RouteController {
     }
 
     // ==========================================
+    // DRIVER TABLET: CONFIRM BIN PICKUP
+    // ==========================================
+    @Operation(
+        summary = "Confirm individual bin pickup",
+        description = "Driver confirms a bin was collected. Immediately resets bin fillLevel to 0 and clears any overdue penalty. " +
+                      "Call this in real-time as each bin is serviced — do NOT wait until end-of-day, " +
+                      "as sensors will overwrite fill level with fresh readings during the shift.")
+    @PostMapping("/{routeId}/pickup/{binId}")
+    public ResponseEntity<String> confirmBinPickup(
+            @PathVariable String routeId,
+            @PathVariable String binId) {
+        try {
+            routeService.confirmBinPickup(routeId, binId);
+            return ResponseEntity.ok("Bin " + binId + " pickup confirmed. Fill level cleared.");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError()
+                    .body("Failed to confirm pickup: " + e.getMessage());
+        }
+    }
+
+    // ==========================================
     // ALL ROUTES (history)
     // ==========================================
-//    @Operation(summary = "Get all routes", description = "Returns full route history")
-//    @GetMapping("/all")
-//    public ResponseEntity<?> getAllRoutes() {
-//        try {
-//            List<Route> routes = routeService.getAllRoutes();
-//            return ResponseEntity.ok(routes);
-//        } catch (Exception e) {
-//            return ResponseEntity.internalServerError()
-//                    .body("Failed to fetch routes: " + e.getMessage());
-//        }
-//    }
-
-    // GET all routes
     @Operation(summary = "Get all routes", description = "Returns full route history")
     @GetMapping("/all")
     public ResponseEntity<?> getAllRoutes() {
         try {
-            System.out.println("📋 [DEBUG] Fetching all routes...");
             List<Route> routes = routeService.getAllRoutes();
-            System.out.println("✅ [DEBUG] Found " + (routes != null ? routes.size() : "null") + " routes");
             return ResponseEntity.ok(routes);
         } catch (Exception e) {
-            System.err.println("❌ [ERROR] Failed to fetch routes: " + e.getMessage());
-            e.printStackTrace(); // This prints the full stack trace to your backend console
             return ResponseEntity.internalServerError()
                     .body("Failed to fetch routes: " + e.getMessage());
         }
@@ -207,6 +180,23 @@ public class RouteController {
     }
 
     // ==========================================
+    // DELETE ROUTE BY ID
+    // ==========================================
+    @Operation(summary = "Delete a route", description = "Permanently deletes a route by its MongoDB ID")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteRoute(@PathVariable String id) {
+        try {
+            routeService.getRouteById(id); // throws if not found
+            routeRepository.deleteById(id);
+            return ResponseEntity.ok("Route " + id + " deleted successfully.");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Failed to delete route: " + e.getMessage());
+        }
+    }
+
+    // ==========================================
     // GET ROUTE BY ID
     // ==========================================
     @Operation(summary = "Get route by ID")
@@ -221,14 +211,42 @@ public class RouteController {
     }
 
     // ==========================================
-    // MARK ROUTE AS COMPLETED
+    // ADMIN: OVERRIDE ROUTE STATUS
     // ==========================================
-    @Operation(summary = "Mark route as completed")
-    @PatchMapping("/{id}/complete")
-    public ResponseEntity<?> completeRoute(@PathVariable String id) {
+    @Operation(
+        summary = "Override route status (admin)",
+        description = "Manually sets the status of a route. Valid values: CREATED, IN_PROGRESS, COMPLETED. " +
+                      "This is an admin flag only — it does NOT update truck loads or bin overdue counters. " +
+                      "Use POST /complete or POST /end-of-day for real operational close-out.")
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateRouteStatus(
+            @PathVariable String id,
+            @Parameter(description = "New status: CREATED, IN_PROGRESS, or COMPLETED") @RequestParam String status) {
         try {
-            Route route = routeService.completeRoute(id);
+            Route route = routeService.updateRouteStatus(id, status);
             return ResponseEntity.ok(route);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ==========================================
+    // ASSIGN / REASSIGN DRIVER
+    // ==========================================
+    @Operation(
+        summary = "Assign a driver to a route",
+        description = "Overrides the driver on an existing route. Use this when you want a different driver than the one assigned to the truck.")
+    @PatchMapping("/{id}/assign-driver")
+    public ResponseEntity<?> assignDriver(
+            @PathVariable String id,
+            @Parameter(description = "Driver ID to assign, e.g. DRV-007") @RequestParam String driverId) {
+        try {
+            Route route = routeService.assignDriver(id, driverId);
+            return ResponseEntity.ok(route);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -246,64 +264,6 @@ public class RouteController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body("Failed to fetch routes: " + e.getMessage());
-        }
-    }
-
-    @PutMapping("/{routeId}/bins/{binId}/collect")
-    public ResponseEntity<Route> collectBin(
-            @PathVariable String routeId,
-            @PathVariable String binId) {
-        try {
-            // Call the service to mark the bin as collected
-            Route route = routeService.markBinAsCollected(routeId, binId);
-            return ResponseEntity.ok(route);
-        } catch (RuntimeException e) {
-            // Return 400 Bad Request if the bin isn't in the route or not found
-            return ResponseEntity.badRequest().build();
-        }
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteRoute(@PathVariable String id) {
-        try {
-            routeService.deleteRoute(id);
-            return ResponseEntity.ok("Route deleted successfully");
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
-        }
-    }
-
-    @PutMapping("/{routeId}/bins/{binId}/report-issue")
-    public ResponseEntity<String> reportIssue(
-            @PathVariable String routeId,
-            @PathVariable String binId,
-            @RequestBody Map<String, String> body) { // Accepts the JSON { "description": "..." }
-
-        String description = body.getOrDefault("description", "No description provided");
-
-        try {
-            routeService.reportIssue(routeId, binId, description);
-            return ResponseEntity.ok("Issue reported successfully.");
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    // Add near your other route endpoints
-    @PutMapping("/{routeId}/bins/{binId}/skip")
-    public ResponseEntity<?> skipBinOnRoute(
-            @PathVariable String routeId,
-            @PathVariable String binId,
-            @RequestBody Map<String, String> body) {
-        try {
-            String reason = body.getOrDefault("reason", "No reason provided");
-            routeService.skipBinOnRoute(routeId, binId, reason);
-            return ResponseEntity.ok("Bin " + binId + " skipped successfully on route " + routeId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.internalServerError().body("Failed to skip bin: " + e.getMessage());
         }
     }
 }

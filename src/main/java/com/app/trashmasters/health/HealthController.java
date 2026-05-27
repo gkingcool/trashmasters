@@ -2,8 +2,10 @@ package com.app.trashmasters.health;
 
 import com.app.trashmasters.bin.BinRepository;
 import com.app.trashmasters.Truck.TruckRepository;
-import com.app.trashmasters.Route.RouteRepository;
-import com.app.trashmasters.Route.Route;
+import com.app.trashmasters.theRoute.RouteRepository;
+import com.app.trashmasters.theRoute.Route;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +20,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/system")
+@Tag(name = "System", description = "System health and status dashboard")
 public class HealthController {
 
     @Autowired
@@ -29,6 +32,7 @@ public class HealthController {
     @Autowired
     private RouteRepository routeRepository;
 
+    @Operation(summary = "Get system health", description = "Returns total bins, trucks, routes, last route generation time, and API connectivity status")
     @GetMapping("/health")
     public ResponseEntity<?> getSystemHealth() {
         Map<String, Object> health = new HashMap<>();

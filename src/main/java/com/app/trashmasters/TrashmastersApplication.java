@@ -13,15 +13,19 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class TrashmastersApplication {
 
 	static {
-		// Load .env file automatically
-		Dotenv dotenv = Dotenv.configure()
-				.directory(System.getProperty("user.dir")) // Project root
-				.load();
-
-		// Set as system properties for Spring to read
-		dotenv.entries().forEach(entry ->
-				System.setProperty(entry.getKey(), entry.getValue())
-		);
+		// Load .env file only if it exists — falls back to IntelliJ/system env vars
+		java.io.File envFile = new java.io.File(System.getProperty("user.dir"), ".env");
+		if (envFile.exists()) {
+			Dotenv dotenv = Dotenv.configure()
+					.directory(System.getProperty("user.dir"))
+					.load();
+			dotenv.entries().forEach(entry ->
+					System.setProperty(entry.getKey(), entry.getValue())
+			);
+			System.out.println("✅ Loaded environment from .env file");
+		} else {
+			System.out.println("ℹ️ No .env file found — using system/IntelliJ environment variables");
+		}
 	}
 
 	public static void main(String[] args) {

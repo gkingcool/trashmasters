@@ -122,6 +122,7 @@ public class BinController {
         }
     }
 
+    @Operation(summary = "Update a bin", description = "Updates bin fields such as location, capacity, zone, and status")
     @PutMapping("/{id}")
     public ResponseEntity<Bin> updateBin(
             @PathVariable String id,
